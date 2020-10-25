@@ -1,0 +1,34 @@
+{
+  "inputs": [
+    {
+      "name": "birthday",
+      "public": false,
+      "type": "field"
+    },
+    {
+      "name": "delta",
+      "public": true,
+      "type": "field"
+    },
+    {
+      "name": "jd",
+      "public": true,
+      "type": "field"
+    },
+    {
+      "name": "ph",
+      "public": false,
+      "type": "field"
+    },
+    {
+      "name": "mask",
+      "public": false,
+      "type": "field"
+    }
+  ],
+  "outputs": [
+    {
+      "type": "field"
+    }
+  ]
+}

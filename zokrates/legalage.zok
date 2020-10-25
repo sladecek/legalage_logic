@@ -1,0 +1,9 @@
+import "hashes/mimc7/mimc7R90"
+
+def main (private field birthday, field delta, field jd, private field ph, private field mask) -> field:
+    field k = birthday * mask
+    field b = mimc7R90(ph, k) * ph
+    assert(birthday + delta <  jd)
+    return mimc7R90(jd, b)
+    return jd
+  
