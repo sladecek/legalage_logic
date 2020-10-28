@@ -11,17 +11,17 @@
       "type": "field"
     },
     {
-      "name": "jd",
+      "name": "today",
       "public": true,
       "type": "field"
     },
     {
-      "name": "ph",
+      "name": "photo_hash",
       "public": false,
       "type": "field"
     },
     {
-      "name": "mask",
+      "name": "private_key",
       "public": false,
       "type": "field"
     }

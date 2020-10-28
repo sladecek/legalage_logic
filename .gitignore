@@ -3,3 +3,5 @@
 Cargo.lock
 *~
 zokrates/log
+/.idea/
+/zokrates/witness

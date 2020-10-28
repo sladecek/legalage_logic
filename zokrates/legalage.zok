@@ -1,9 +1,9 @@
 import "hashes/mimc7/mimc7R90"
 
-def main (private field birthday, field delta, field jd, private field ph, private field mask) -> field:
-    field k = birthday * mask
-    field b = mimc7R90(ph, k) * ph
-    assert(birthday + delta <  jd)
-    return mimc7R90(jd, b)
-    return jd
+def main (private field birthday, field delta, field today, private field photo_hash, private field private_key) -> field:
+    assert(birthday + delta > today)
+    field k = birthday * private_key
+    field public_key = mimc7R90(photo_hash, k) * photo_hash
+    return mimc7R90(today, public_key)
+
   
