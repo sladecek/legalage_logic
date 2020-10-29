@@ -3,5 +3,6 @@
 Cargo.lock
 *~
 zokrates/log
+zokrates/proof.json
 /.idea/
 /zokrates/witness

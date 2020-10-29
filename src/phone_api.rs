@@ -1,36 +1,42 @@
+use bellman_ce::groth16::Proof as BellmanProof;
+use bellman_ce::pairing::{
+    bn256::{Bn256, G1Affine, G2Affine},
+    CurveAffine,
+};
+use base64::{decode, encode};
 
 /// The relation to be proved.
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Relation {
     Younger,
-    Older
+    Older,
 }
 
 /// Public part of the proof.
 #[derive(Debug)]
 pub struct Public {
-    /// Today julian date. 
+    /// Today julian date.
     pub today: u32,
-    
+
     /// Current UTC time since midnight. Publicly encoded in the QR code but not used
     /// in the proof.
     pub now: u32,
 
-    /// Relation. 
+    /// Relation.
     pub relation: Relation,
-    
-    /// Minimal (maximal) difference between 'today' and 'birthday' in days. 
+
+    /// Minimal (maximal) difference between 'today' and 'birthday' in days.
     pub delta: u32,
 }
 
 impl Public {
     pub fn new() -> Self {
-	Public {
-	    today: 0,
-	    now: 0,
-	    relation: Relation::Younger,
-	    delta: 0
-	}
+        Public {
+            today: 0,
+            now: 0,
+            relation: Relation::Younger,
+            delta: 0,
+        }
     }
 }
 
@@ -39,7 +45,7 @@ impl Public {
 pub struct QrRequest {
     /// Public part of the proof.
     pub public: Public,
-    
+
     /// Birthday - julian date. Private part of the proof.
     pub birthday: u32,
 
@@ -52,18 +58,23 @@ pub struct QrRequest {
     /// range. Private part of the proof.
     pub photos_digest: Vec<u8>,
 }
- 
+
 impl QrRequest {
     pub fn new() -> Self {
-        QrRequest{ public: Public::new(), birthday:0, private_key: Vec::new(), photos_digest: Vec::new()}
+        QrRequest {
+            public: Public::new(),
+            birthday: 0,
+            private_key: Vec::new(),
+            photos_digest: Vec::new(),
+        }
     }
 
     pub fn to_qr_code_string() -> String {
-	String::from("")
+        String::from("")
     }
 
     pub fn from_qr_code_string(qr_str: &str) -> Self {
-	QrRequest::new()
+        QrRequest::new()
     }
 }
 
@@ -73,12 +84,12 @@ impl QrRequest {
 pub struct ProofQrCode {
     /// Public part of the proof.
     pub public: Public,
-    
-    // Proof a,b,c
-    pub raw_proof: String,
+
+    // Proof a,b,c curve points.
+    pub proof: BellmanProof<Bn256>,
 
     /// Challenge. Big-endian encoded number in Field
-    /// range. Public output of the proof computation. 
+    /// range. Public output of the proof computation.
     pub challenge: Vec<u8>,
 }
 
@@ -91,12 +102,14 @@ pub struct ProofQrCode {
 
 // }
 
-impl ProofQrCode {
-    pub fn new() -> Self {
-	ProofQrCode {
-	    public: Public::new(),
-	    raw_proof: String::new(),
-	    challenge: Vec::new()
-	}
-    }
-}
+// impl ProofQrCode {
+//     pub fn new() -> Self {
+//         ProofQrCode {
+//             public: Public::new(),
+//             a: G1Affine::zero(),
+// 	    b: G2Affine::zero(),
+// 	    c: G1Affine::zero(),
+//             challenge: Vec::new(),
+//         }
+//     }
+// }
