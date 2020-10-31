@@ -1,3 +1,5 @@
+// Zero-knowledge algorithms.
+
 use crate::phone_api::{ProofQrCode, Public, QrRequest, Relation};
 use serde_json;
 use zokrates_core::ir::{self, ProgEnum};
@@ -34,14 +36,30 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
 
     let mut arguments: Vec<Bn128Field> = Vec::new();
 
-    // Inverting the relation.
     let mut birthday = rq.birthday;
     let mut delta = rq.public.delta;
     let mut today = rq.public.today;
-    if rq.public.relation == Relation::Younger {
-        birthday = MAX_JULIAN_DAY - birthday;
-        delta = MAX_JULIAN_DAY - delta;
-        today = 2 * MAX_JULIAN_DAY - today;
+
+    if rq.is_relation_valid() {
+        // Inverting the relation.
+        if rq.public.relation == Relation::Younger {
+            birthday = MAX_JULIAN_DAY - birthday;
+            delta = MAX_JULIAN_DAY - delta;
+            today = 2 * MAX_JULIAN_DAY - today;
+        }
+    } else {
+        // Generating invalid proof.
+        //
+        // The user wants us to proof something what is not
+        // true. Maybe someone is trying to abuse the phone to learn
+        // about the users age. We do not want to report an error because
+        // this will allow annyone to guess the age by trial and
+        // error. Instead we will generate a valid proof but for
+        // another set of input variables. The proof will fail to be
+        // verified but it will look similar to a real proof and the
+        // generation will take the same time.
+        delta = 0;
+        today = birthday + 1;
     }
 
     arguments.push(Bn128Field::from(birthday));
@@ -114,7 +132,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn verify_ok() {
+    fn verify_younger() {
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -133,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn verify_fail() {
+    fn verify_older() {
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -149,5 +167,57 @@ mod tests {
         assert!(verify_proof(&p).is_ok());
         let ps = p.to_string();
         assert!(verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
+    }
+
+    #[test]
+    fn verify_invalid() {
+        let rq = QrRequest {
+            public: Public {
+                today: 2020,
+                now: 1200,
+                relation: Relation::Older,
+                delta: 18,
+            },
+            birthday: 2010,
+            private_key: Vec::new(),
+            photos_digest: Vec::new(),
+        };
+        let p = generate_proof(rq).unwrap();
+        assert!(!verify_proof(&p).is_ok());
+    }
+
+    #[test]
+    fn verify_marginal_case_older() {
+        // Equality is refused. Wait till midnight.
+        let rq = QrRequest {
+            public: Public {
+                today: 2020,
+                now: 1200,
+                relation: Relation::Older,
+                delta: 20,
+            },
+            birthday: 2000,
+            private_key: Vec::new(),
+            photos_digest: Vec::new(),
+        };
+        let p = generate_proof(rq).unwrap();
+        assert!(!verify_proof(&p).is_ok());
+    }
+
+    #[test]
+    fn verify_marginal_case_younger() {
+        let rq = QrRequest {
+            public: Public {
+                today: 2020,
+                now: 1200,
+                relation: Relation::Older,
+                delta: 20,
+            },
+            birthday: 2000,
+            private_key: Vec::new(),
+            photos_digest: Vec::new(),
+        };
+        let p = generate_proof(rq).unwrap();
+        assert!(!verify_proof(&p).is_ok());
     }
 }
