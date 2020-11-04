@@ -1,6 +1,6 @@
 // Zero-knowledge algorithms.
 
-use crate::phone_api::{ProofQrCode, Public, QrRequest, Relation};
+use crate::phone_api::{ProofQrCode, QrRequest, Relation};
 use serde_json;
 use zokrates_core::ir::{self, ProgEnum};
 use zokrates_core::proof_system::{
