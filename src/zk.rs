@@ -1,6 +1,6 @@
 // Zero-knowledge algorithms.
 
-use crate::phone_api::{ProofQrCode, QrRequest, Relation};
+use crate::api::{Private, ProofQrCode, QrRequest, Relation};
 use serde_json;
 use zokrates_core::ir::{self, ProgEnum};
 use zokrates_core::proof_system::{
@@ -23,6 +23,18 @@ static VERIFICATION_KEY: &'static [u8] = include_bytes!("../zokrates/verificatio
 // of the inequality.
 const MAX_JULIAN_DAY: u32 = 9999999;
 
+pub fn generate_random_private_key() -> Vec<u8> {
+    Vec::new()
+}
+
+pub fn generate_card_key(_rq: Private) -> Vec<u8> {
+    Vec::new()
+}
+
+pub fn compute_challenge(_card_key: Vec<u8>, _today: u32) -> Vec<u8> {
+    Vec::new()
+}
+
 pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
     let prg = match ProgEnum::deserialize(&mut PROGRAM.clone())? {
         ProgEnum::Bn128Program(p) => p,
@@ -36,7 +48,7 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
 
     let mut arguments: Vec<Bn128Field> = Vec::new();
 
-    let mut birthday = rq.birthday;
+    let mut birthday = rq.private.birthday;
     let mut delta = rq.public.delta;
     let mut today = rq.public.today;
 
@@ -65,8 +77,8 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
     arguments.push(Bn128Field::from(birthday));
     arguments.push(Bn128Field::from(delta));
     arguments.push(Bn128Field::from(today));
-    arguments.push(Bn128Field::from_byte_vector(rq.photos_digest));
-    arguments.push(Bn128Field::from_byte_vector(rq.private_key));
+    arguments.push(Bn128Field::from_byte_vector(rq.private.photos_digest));
+    arguments.push(Bn128Field::from_byte_vector(rq.private.private_key));
 
     let witness = interpreter
         .execute(&prg, &arguments)
@@ -128,9 +140,34 @@ pub fn verify_proof(qr: &ProofQrCode) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::api::{Private, ProofQrCode, Public, QrRequest, Relation};
     use std::str::FromStr;
 
+    #[test]
+    fn generate_random_private_key() {
+	let key = super::generate_random_private_key();
+	assert_eq!(0, key.len());
+    }
+
+    #[test]
+    fn generate_card_key() {
+        let private= Private {
+                birthday: 2001,
+                private_key: Vec::new(),
+                photos_digest: Vec::new(),
+            };
+	let key = super::generate_card_key(private);
+	assert_eq!(0, key.len());
+    }
+
+    #[test]
+    fn compute_challenge() {
+	let card_key = Vec::new();
+	let today = 0u32;
+	let challenge = super::compute_challenge(card_key, today);
+	assert_eq!(0, challenge.len());
+    }
+    
     #[test]
     fn verify_younger() {
         let rq = QrRequest {
@@ -140,14 +177,16 @@ mod tests {
                 relation: Relation::Older,
                 delta: 18,
             },
-            birthday: 2001,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+            private: Private {
+                birthday: 2001,
+                private_key: Vec::new(),
+                photos_digest: Vec::new(),
+            },
         };
-        let p = generate_proof(rq).unwrap();
-        assert!(verify_proof(&p).is_ok());
+        let p = super::generate_proof(rq).unwrap();
+        assert!(super::verify_proof(&p).is_ok());
         let ps = p.to_string();
-        assert!(verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
+        assert!(super::verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
     }
 
     #[test]
@@ -159,14 +198,16 @@ mod tests {
                 relation: Relation::Younger,
                 delta: 21,
             },
-            birthday: 2001,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+            private: Private {
+                birthday: 2001,
+                private_key: Vec::new(),
+                photos_digest: Vec::new(),
+            },
         };
-        let p = generate_proof(rq).unwrap();
-        assert!(verify_proof(&p).is_ok());
+        let p = super::generate_proof(rq).unwrap();
+        assert!(super::verify_proof(&p).is_ok());
         let ps = p.to_string();
-        assert!(verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
+        assert!(super::verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
     }
 
     #[test]
@@ -178,12 +219,14 @@ mod tests {
                 relation: Relation::Older,
                 delta: 18,
             },
-            birthday: 2010,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+            private: Private {
+                birthday: 2010,
+                private_key: Vec::new(),
+                photos_digest: Vec::new(),
+            },
         };
-        let p = generate_proof(rq).unwrap();
-        assert!(!verify_proof(&p).is_ok());
+        let p = super::generate_proof(rq).unwrap();
+        assert!(!super::verify_proof(&p).is_ok());
     }
 
     #[test]
@@ -196,12 +239,14 @@ mod tests {
                 relation: Relation::Older,
                 delta: 20,
             },
-            birthday: 2000,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+            private: Private {
+                birthday: 2000,
+                private_key: Vec::new(),
+                photos_digest: Vec::new(),
+            },
         };
-        let p = generate_proof(rq).unwrap();
-        assert!(!verify_proof(&p).is_ok());
+        let p = super::generate_proof(rq).unwrap();
+        assert!(!super::verify_proof(&p).is_ok());
     }
 
     #[test]
@@ -213,11 +258,13 @@ mod tests {
                 relation: Relation::Older,
                 delta: 20,
             },
-            birthday: 2000,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+            private: Private {
+                birthday: 2000,
+                private_key: Vec::new(),
+                photos_digest: Vec::new(),
+            },
         };
-        let p = generate_proof(rq).unwrap();
-        assert!(!verify_proof(&p).is_ok());
+        let p = super::generate_proof(rq).unwrap();
+        assert!(!super::verify_proof(&p).is_ok());
     }
 }

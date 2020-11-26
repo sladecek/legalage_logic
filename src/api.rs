@@ -1,5 +1,3 @@
-// This module contains API objects for the phone app interface.
-
 use bellman_ce::groth16::Proof as BellmanProof;
 use bellman_ce::pairing::bn256::Bn256;
 use bs58;
@@ -7,6 +5,13 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::Cursor;
 
 use std::str::FromStr;
+
+/// Trust level of the verifier.
+pub enum VerifierLevel {
+    SelfSignedTest,
+    HasPublicCertificate,
+    Professional
+}
 
 /// The relation to be proved.
 #[derive(PartialEq, Debug, Clone)]
@@ -43,12 +48,9 @@ impl Public {
     }
 }
 
-/// Request for QR code generation from phone app.
+/// Private part of the proof
 #[derive(Debug)]
-pub struct QrRequest {
-    /// Public part of the proof.
-    pub public: Public,
-
+pub struct Private {
     /// Birthday - julian date. Private part of the proof.
     pub birthday: u32,
 
@@ -62,13 +64,29 @@ pub struct QrRequest {
     pub photos_digest: Vec<u8>,
 }
 
+impl Private {
+    pub fn new() -> Self {
+        Private {
+            birthday: 0,
+            private_key: Vec::new(),
+            photos_digest: Vec::new(),
+        }
+    }
+}
+
+
+/// Request for QR code generation from phone app.
+#[derive(Debug)]
+pub struct QrRequest {
+    pub public: Public,
+    pub private: Private,
+}
+
 impl QrRequest {
     pub fn new() -> Self {
         QrRequest {
             public: Public::new(),
-            birthday: 0,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+	    private: Private::new(),
         }
     }
 
@@ -82,8 +100,8 @@ impl QrRequest {
 
     pub fn is_relation_valid(&self) -> bool {
         match self.public.relation {
-            Relation::Younger => self.birthday + self.public.delta > self.public.today,
-            Relation::Older => self.birthday + self.public.delta < self.public.today,
+            Relation::Younger => self.private.birthday + self.public.delta > self.public.today,
+            Relation::Older => self.private.birthday + self.public.delta < self.public.today,
         }
     }
 }
