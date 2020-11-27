@@ -1,6 +1,8 @@
 // Zero-knowledge algorithms.
 
 use crate::api::{Private, ProofQrCode, QrRequest, Relation};
+use bellman_ce::pairing::{bn256::Bn256, ff::ScalarEngine};
+use rand::{ChaChaRng, Rng, SeedableRng, thread_rng};
 use serde_json;
 use zokrates_core::ir::{self, ProgEnum};
 use zokrates_core::proof_system::{
@@ -23,8 +25,13 @@ static VERIFICATION_KEY: &'static [u8] = include_bytes!("../zokrates/verificatio
 // of the inequality.
 const MAX_JULIAN_DAY: u32 = 9999999;
 
+type Fr = <Bn256 as ScalarEngine>::Fr;
+
 pub fn generate_random_private_key() -> Vec<u8> {
-    Vec::new()
+    let seed = thread_rng().gen::<[u32;4]>();
+    let mut rng = ChaChaRng::from_seed(&seed);
+    let r: Fr   = rng.gen();
+    Bn128Field::from_bellman(r).into_byte_vector()
 }
 
 pub fn generate_card_key(_rq: Private) -> Vec<u8> {
@@ -145,29 +152,30 @@ mod tests {
 
     #[test]
     fn generate_random_private_key() {
-	let key = super::generate_random_private_key();
-	assert_eq!(0, key.len());
+        let key = super::generate_random_private_key();
+	println!("{:?}", key);
+        assert_eq!(32, key.len());
     }
 
     #[test]
     fn generate_card_key() {
-        let private= Private {
-                birthday: 2001,
-                private_key: Vec::new(),
-                photos_digest: Vec::new(),
-            };
-	let key = super::generate_card_key(private);
-	assert_eq!(0, key.len());
+        let private = Private {
+            birthday: 2001,
+            private_key: Vec::new(),
+            photos_digest: Vec::new(),
+        };
+        let key = super::generate_card_key(private);
+        assert_eq!(0, key.len());
     }
 
     #[test]
     fn compute_challenge() {
-	let card_key = Vec::new();
-	let today = 0u32;
-	let challenge = super::compute_challenge(card_key, today);
-	assert_eq!(0, challenge.len());
+        let card_key = Vec::new();
+        let today = 0u32;
+        let challenge = super::compute_challenge(card_key, today);
+        assert_eq!(0, challenge.len());
     }
-    
+
     #[test]
     fn verify_younger() {
         let rq = QrRequest {
