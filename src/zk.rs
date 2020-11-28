@@ -1,8 +1,11 @@
 // Zero-knowledge algorithms.
 
 use crate::api::{Private, ProofQrCode, QrRequest, Relation};
+
 use bellman_ce::pairing::{bn256::Bn256, ff::ScalarEngine};
-use rand::{ChaChaRng, Rng, SeedableRng, thread_rng};
+use ff_mimc::{PrimeField, PrimeFieldRepr};
+use mimc_rs;
+use rand::{thread_rng, ChaChaRng, Rng, SeedableRng};
 use serde_json;
 use zokrates_core::ir::{self, ProgEnum};
 use zokrates_core::proof_system::{
@@ -28,18 +31,47 @@ const MAX_JULIAN_DAY: u32 = 9999999;
 type Fr = <Bn256 as ScalarEngine>::Fr;
 
 pub fn generate_random_private_key() -> Vec<u8> {
-    let seed = thread_rng().gen::<[u32;4]>();
+    let seed = thread_rng().gen::<[u32; 4]>();
     let mut rng = ChaChaRng::from_seed(&seed);
-    let r: Fr   = rng.gen();
+    let r: Fr = rng.gen();
     Bn128Field::from_bellman(r).into_byte_vector()
 }
 
-pub fn generate_card_key(_rq: Private) -> Vec<u8> {
-    Vec::new()
+fn zok2mimc(value: &Bn128Field) -> mimc_rs::Fr {
+    // Zokrates uses internal BigInt representation, mimc uses ff with private Repr.
+
+    let s = value.to_dec_string();
+    mimc_rs::Fr::from_str(&s).unwrap()
 }
 
-pub fn compute_challenge(_card_key: Vec<u8>, _today: u32) -> Vec<u8> {
-    Vec::new()
+fn mimc2zok(value: mimc_rs::Fr) -> Bn128Field {
+    let mut res: Vec<u8> = vec![];
+    value.into_repr().write_le(&mut res).unwrap();
+    Bn128Field::from_byte_vector(res)
+}
+
+fn compute_mimc7r10_hash(x: &Bn128Field, k: &Bn128Field) -> Bn128Field {
+    let mimc7r10 = mimc_rs::Mimc7::new(10);
+    let hash = mimc7r10.hash(&zok2mimc(x), &zok2mimc(k));
+    mimc2zok(hash)
+}
+
+pub fn generate_card_key(rq: Private) -> Vec<u8> {
+    let private_key = Bn128Field::from_byte_vector(rq.private_key);
+    let birthday = Bn128Field::from(rq.birthday);
+    let photos_digest = Bn128Field::from_byte_vector(rq.photos_digest);
+
+    let k = birthday * private_key;
+    let m1 = compute_mimc7r10_hash(&photos_digest, &k);
+    let card_key = m1 * photos_digest;
+    card_key.into_byte_vector()
+}
+
+pub fn compute_challenge(card_key: Vec<u8>, today: u32) -> Vec<u8> {
+    let card_key = Bn128Field::from_byte_vector(card_key);
+    let today = Bn128Field::from(today);
+    let challenge = compute_mimc7r10_hash(&today, &card_key);
+    challenge.into_byte_vector()
 }
 
 pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
@@ -147,33 +179,94 @@ pub fn verify_proof(qr: &ProofQrCode) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::api::{Private, ProofQrCode, Public, QrRequest, Relation};
     use std::str::FromStr;
+    use zokrates_field::Bn128Field;
 
     #[test]
     fn generate_random_private_key() {
         let key = super::generate_random_private_key();
-	println!("{:?}", key);
+        println!("{:?}", key);
         assert_eq!(32, key.len());
+    }
+
+    fn bn128(s: &str) -> Bn128Field {
+        Bn128Field::try_from_dec_str(s).unwrap()
+    }
+
+    #[test]
+    fn test_mimc7r10() {
+        // values from ZoKrartes test
+
+        assert_eq!(
+            compute_mimc7r10_hash(&bn128("0"), &bn128("0")),
+            bn128("6004544488495356385698286530147974336054653445122716140990101827963729149289")
+        );
+        assert_eq!(
+            compute_mimc7r10_hash(&bn128("100"), &bn128("0")),
+            bn128("2977550761518141183167168643824354554080911485709001361112529600968315693145")
+        );
+        assert_eq!(
+            compute_mimc7r10_hash(
+                &bn128("100"),
+                &bn128(
+                    "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+                )
+            ),
+            bn128("2977550761518141183167168643824354554080911485709001361112529600968315693145")
+        );
+        assert_eq!(
+            compute_mimc7r10_hash(
+                &bn128(
+                    "21888242871839275222246405745257275088548364400416034343698204186575808495618"
+                ),
+                &bn128("1")
+            ),
+            bn128("11476724043755138071320043459606423473319855817296339514744600646762741571430")
+        );
+        assert_eq!(
+            compute_mimc7r10_hash(
+                &bn128(
+                    "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+                ),
+                &bn128(
+                    "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+                )
+            ),
+            bn128("6004544488495356385698286530147974336054653445122716140990101827963729149289")
+        );
     }
 
     #[test]
     fn generate_card_key() {
+        let m1 =
+            bn128("2398929016733331352351677352383442125702690766615627729516078292095018104789");
+        assert_eq!(compute_mimc7r10_hash(&bn128("3"), &bn128("20010")), m1);
+
         let private = Private {
             birthday: 2001,
-            private_key: Vec::new(),
-            photos_digest: Vec::new(),
+            private_key: bn128("10").into_byte_vector(),
+            photos_digest: bn128("3").into_byte_vector(),
         };
         let key = super::generate_card_key(private);
-        assert_eq!(0, key.len());
+        assert_eq!(32, key.len());
+
+        assert_eq!(Bn128Field::from_byte_vector(key), bn128("3") * m1);
     }
 
     #[test]
     fn compute_challenge() {
-        let card_key = Vec::new();
-        let today = 0u32;
+        let m1 =
+            bn128("20806133116655125295815844821187893628062572117889123030572462808546913026234");
+        assert_eq!(compute_mimc7r10_hash(&bn128("2020"), &bn128("27")), m1);
+
+        let card_key = bn128("27").into_byte_vector();
+        let today = 2020;
         let challenge = super::compute_challenge(card_key, today);
-        assert_eq!(0, challenge.len());
+        assert_eq!(32, challenge.len());
+
+        assert_eq!(Bn128Field::from_byte_vector(challenge), m1);
     }
 
     #[test]
