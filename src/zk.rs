@@ -26,7 +26,7 @@ static VERIFICATION_KEY: &'static [u8] = include_bytes!("../zokrates/verificatio
 // because there is no signed integer among ZoKrates types, an
 // unsigned int is used and a constant must be added to both sides
 // of the inequality.
-const MAX_JULIAN_DAY: u32 = 9999999;
+const MAX_JULIAN_DAY: i32 = 9999999;
 
 type Fr = <Bn256 as ScalarEngine>::Fr;
 
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mimc7r10() {
+    fn mimc7r10() {
         // values from ZoKrartes test
 
         assert_eq!(
@@ -369,3 +369,4 @@ mod tests {
         assert!(!super::verify_proof(&p).is_ok());
     }
 }
+

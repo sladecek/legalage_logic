@@ -3,4 +3,4 @@
 
 pub mod api;
 pub mod android_api;
-mod zk;
+pub mod zk;

@@ -24,17 +24,17 @@ pub enum Relation {
 #[derive(Debug, Clone)]
 pub struct Public {
     /// Today julian date.
-    pub today: u32,
+    pub today: i32,
 
     /// Current UTC time since midnight. Publicly encoded in the QR code but not used
     /// in the proof.
-    pub now: u32,
+    pub now: i32,
 
     /// Relation.
     pub relation: Relation,
 
     /// Minimal (maximal) difference between 'today' and 'birthday' in days.
-    pub delta: u32,
+    pub delta: i32,
 }
 
 impl Public {
@@ -52,7 +52,7 @@ impl Public {
 #[derive(Debug)]
 pub struct Private {
     /// Birthday - julian date. Private part of the proof.
-    pub birthday: u32,
+    pub birthday: i32,
 
     /// Private key known only to the prover and to the
     /// certifier. Big-endian encoded number in Field range. Private
@@ -127,9 +127,9 @@ pub struct QrError {}
 impl ProofQrCode {
     pub fn public_to_string(&self) -> String {
         let mut wtr = vec![];
-        wtr.write_u32::<BigEndian>(self.public.today).unwrap();
-        wtr.write_u32::<BigEndian>(self.public.now).unwrap();
-        wtr.write_u32::<BigEndian>(self.public.delta).unwrap();
+        wtr.write_i32::<BigEndian>(self.public.today).unwrap();
+        wtr.write_i32::<BigEndian>(self.public.now).unwrap();
+        wtr.write_i32::<BigEndian>(self.public.delta).unwrap();
         wtr.push(self.public.relation.clone() as u8);
         bs58::encode(wtr).into_string()
     }
@@ -137,9 +137,9 @@ impl ProofQrCode {
     pub fn public_from_str(s: &str) -> Result<Public, QrError> {
         let mut rdr = Cursor::new(bs58::decode(s).into_vec().map_err(|_| QrError {})?);
 
-        let today = rdr.read_u32::<BigEndian>().map_err(|_| QrError {})?;
-        let now = rdr.read_u32::<BigEndian>().map_err(|_| QrError {})?;
-        let delta = rdr.read_u32::<BigEndian>().map_err(|_| QrError {})?;
+        let today = rdr.read_i32::<BigEndian>().map_err(|_| QrError {})?;
+        let now = rdr.read_i32::<BigEndian>().map_err(|_| QrError {})?;
+        let delta = rdr.read_i32::<BigEndian>().map_err(|_| QrError {})?;
         const YOUNGER: u8 = Relation::Younger as u8;
         let relation = match rdr.read_u8().map_err(|_| QrError {})? {
             YOUNGER => Relation::Younger,
