@@ -1,12 +1,14 @@
 // Zero-knowledge algorithms.
 
-use crate::api::{Private, ProofQrCode, QrRequest, Relation};
+use crate::api::{Private, ProofQrCode, QrError, QrRequest, Relation};
 
+use bellman_ce::groth16::Proof as BellmanProof;
 use bellman_ce::pairing::{bn256::Bn256, ff::ScalarEngine};
 use ff_mimc::{PrimeField, PrimeFieldRepr};
 use mimc_rs;
 use rand::{thread_rng, ChaChaRng, Rng, SeedableRng};
 use serde_json;
+use std::io::Cursor;
 use zokrates_core::ir::{self, ProgEnum};
 use zokrates_core::proof_system::{
     bellman::groth16::{ProofPoints, G16},
@@ -116,7 +118,7 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
     arguments.push(Bn128Field::from(birthday));
     arguments.push(Bn128Field::from(delta));
     arguments.push(Bn128Field::from(today));
-    arguments.push(Bn128Field::from_byte_vector(rq.private.photos_digest));
+    arguments.push(Bn128Field::from_byte_vector(rq.private.photos_digest.clone()));
     arguments.push(Bn128Field::from_byte_vector(rq.private.private_key));
 
     let witness = interpreter
@@ -129,15 +131,18 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
 
     let proof = G16::generate_proof(prg, witness, PROVING_KEY.to_vec());
 
+    let hidden_proof = hide_bellman_proof(&proof.proof.into_bellman::<Bn128Field>(),
+					  &rq.private.photos_digest);
+    
     let qr = ProofQrCode {
         public: rq.public,
-        proof: proof.proof.into_bellman::<Bn128Field>(),
+        proof: hidden_proof,
         challenge: out.into_byte_vector(),
     };
     Ok(qr)
 }
 
-pub fn verify_proof(qr: &ProofQrCode) -> Result<(), String> {
+pub fn verify_proof(qr: &ProofQrCode, photo_digest: &Vec<u8>) -> Result<(), String> {
     let vk = serde_json::from_reader(VERIFICATION_KEY)
         .map_err(|why| format!("Couldn't deserialize verification key: {}", why))?;
 
@@ -155,10 +160,13 @@ pub fn verify_proof(qr: &ProofQrCode) -> Result<(), String> {
     inputs.push(Bn128Field::from(today));
     inputs.push(Bn128Field::from_byte_vector(qr.challenge.clone()));
 
-    let mut raw: Vec<u8> = Vec::new();
-    qr.proof.write(&mut raw).unwrap();
+    let proof = unhide_bellman_proof(&qr.proof, photo_digest).unwrap(); // TODO error
 
-    let proof_points = ProofPoints::from_bellman::<Bn128Field>(&qr.proof);
+    
+    let mut raw: Vec<u8> = Vec::new();
+    proof.write(&mut raw).unwrap();
+
+    let proof_points = ProofPoints::from_bellman::<Bn128Field>(&proof);
 
     let proof = Proof::<ProofPoints> {
         proof: proof_points,
@@ -175,6 +183,32 @@ pub fn verify_proof(qr: &ProofQrCode) -> Result<(), String> {
     } else {
         Err(String::from("no"))
     }
+}
+
+fn hide_buffer(buf: &mut Vec<u8>, hidding: &Vec<u8>) {
+    if hidding.len() > 0 {
+        for i in 0..buf.len() {
+            buf[i] ^= hidding[i % hidding.len()];
+        }
+    }
+}
+
+pub fn hide_bellman_proof(proof: &BellmanProof<Bn256>, hidding: &Vec<u8>) -> Vec<u8> {
+    let mut proof_bytes: Vec<u8> = Vec::new();
+    proof.write(&mut proof_bytes).unwrap();
+    hide_buffer(&mut proof_bytes, hidding);
+    proof_bytes
+	
+}
+
+pub fn unhide_bellman_proof(
+    hidden: &Vec<u8>,
+    hidding: &Vec<u8>,
+) -> Result<BellmanProof<Bn256>, QrError> {
+    let mut b = hidden.clone();
+    hide_buffer(&mut b, hidding);
+    let mut rdr = Cursor::new(b);
+    BellmanProof::<Bn256>::read(&mut rdr).map_err(|_| QrError {})
 }
 
 #[cfg(test)]
@@ -271,6 +305,7 @@ mod tests {
 
     #[test]
     fn verify_younger() {
+	let photos_digest = vec![2u8, 7];
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -281,17 +316,18 @@ mod tests {
             private: Private {
                 birthday: 2001,
                 private_key: Vec::new(),
-                photos_digest: Vec::new(),
+                photos_digest: photos_digest.clone(),
             },
         };
         let p = super::generate_proof(rq).unwrap();
-        assert!(super::verify_proof(&p).is_ok());
+        assert!(super::verify_proof(&p, &photos_digest).is_ok());
         let ps = p.to_string();
-        assert!(super::verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
+        assert!(super::verify_proof(&ProofQrCode::from_str(&ps).unwrap(), &photos_digest).is_ok());
     }
 
     #[test]
     fn verify_older() {
+	let photos_digest = Vec::new();
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -302,17 +338,18 @@ mod tests {
             private: Private {
                 birthday: 2001,
                 private_key: Vec::new(),
-                photos_digest: Vec::new(),
+                photos_digest: photos_digest.clone(),
             },
         };
         let p = super::generate_proof(rq).unwrap();
-        assert!(super::verify_proof(&p).is_ok());
+        assert!(super::verify_proof(&p, &photos_digest).is_ok());
         let ps = p.to_string();
-        assert!(super::verify_proof(&ProofQrCode::from_str(&ps).unwrap()).is_ok());
+        assert!(super::verify_proof(&ProofQrCode::from_str(&ps).unwrap(), &photos_digest).is_ok());
     }
 
     #[test]
     fn verify_invalid() {
+	let photos_digest = Vec::new();
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -323,15 +360,16 @@ mod tests {
             private: Private {
                 birthday: 2010,
                 private_key: Vec::new(),
-                photos_digest: Vec::new(),
+                photos_digest: photos_digest.clone(),
             },
         };
         let p = super::generate_proof(rq).unwrap();
-        assert!(!super::verify_proof(&p).is_ok());
+        assert!(!super::verify_proof(&p, &photos_digest).is_ok());
     }
 
     #[test]
     fn verify_marginal_case_older() {
+	let photos_digest = Vec::new();
         // Equality is refused. Wait till midnight.
         let rq = QrRequest {
             public: Public {
@@ -343,15 +381,16 @@ mod tests {
             private: Private {
                 birthday: 2000,
                 private_key: Vec::new(),
-                photos_digest: Vec::new(),
+                photos_digest: photos_digest.clone(),
             },
         };
         let p = super::generate_proof(rq).unwrap();
-        assert!(!super::verify_proof(&p).is_ok());
+        assert!(!super::verify_proof(&p, &photos_digest).is_ok());
     }
 
     #[test]
     fn verify_marginal_case_younger() {
+	let photos_digest = Vec::new();
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -362,11 +401,10 @@ mod tests {
             private: Private {
                 birthday: 2000,
                 private_key: Vec::new(),
-                photos_digest: Vec::new(),
+                photos_digest: photos_digest.clone(),
             },
         };
         let p = super::generate_proof(rq).unwrap();
-        assert!(!super::verify_proof(&p).is_ok());
+        assert!(!super::verify_proof(&p, &photos_digest).is_ok());
     }
 }
-

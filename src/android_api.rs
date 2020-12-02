@@ -96,7 +96,7 @@ pub mod android {
             .expect("Cannot unwrap 'photo_digest'.");
 
         let result = match &ProofQrCode::from_str(&qr_code_rs) {
-            Ok(qr_parsed) => match verify_proof(qr_parsed) {
+            Ok(qr_parsed) => match verify_proof(qr_parsed, photo_digest_rs) {
                 Ok(()) => {
                     //		    let proof = ProofQrCode::public_from_str(&qr_code_rs);
                     // TODO copy public objects

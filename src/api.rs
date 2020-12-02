@@ -1,5 +1,5 @@
-use bellman_ce::groth16::Proof as BellmanProof;
-use bellman_ce::pairing::bn256::Bn256;
+//use bellman_ce::groth16::Proof as BellmanProof;
+//use bellman_ce::pairing::bn256::Bn256;
 use bs58;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::Cursor;
@@ -128,8 +128,8 @@ pub struct ProofQrCode {
     /// Public part of the proof.
     pub public: Public,
 
-    // Proof a,b,c curve points.
-    pub proof: BellmanProof<Bn256>,
+    // Proof a,b,c curve points hidden by photo digest.
+    pub proof: Vec<u8>,
 
     /// Challenge. Big-endian encoded number in Field
     /// range. Public output of the proof computation.
@@ -169,14 +169,11 @@ impl ProofQrCode {
     }
 
     pub fn proof_to_string(&self) -> String {
-        let mut compressed: Vec<u8> = Vec::new();
-        self.proof.write(&mut compressed).unwrap();
-        bs58::encode(compressed).into_string()
+        bs58::encode(&self.proof).into_string()
     }
 
-    pub fn proof_from_str(s: &str) -> Result<BellmanProof<Bn256>, QrError> {
-        let mut rdr = Cursor::new(bs58::decode(s).into_vec().map_err(|_| QrError {})?);
-        BellmanProof::<Bn256>::read(&mut rdr).map_err(|_| QrError {})
+    pub fn proof_from_str(s: &str) -> Result<Vec<u8>, QrError> {
+        bs58::decode(s).into_vec().map_err(|_| QrError {})
     }
 
     pub fn challenge_to_string(&self) -> String {
