@@ -6,11 +6,13 @@ use std::io::Cursor;
 
 use std::str::FromStr;
 
+use chrono::{Datelike, NaiveDate};
+
 /// Trust level of the verifier.
 pub enum VerifierLevel {
     SelfSignedTest,
     HasPublicCertificate,
-    Professional
+    Professional,
 }
 
 /// The relation to be proved.
@@ -74,6 +76,19 @@ impl Private {
     }
 }
 
+pub fn age_to_delta(birthday: i32, age: i32, relation: Relation) -> i32 {
+    let dbirth = NaiveDate::from_num_days_from_ce(birthday - 1721425);
+    let dtest =
+        NaiveDate::from_ymd_opt(dbirth.year() + age, dbirth.month(), dbirth.day()).unwrap_or(
+            NaiveDate::from_ymd(dbirth.year() + age, dbirth.month(), dbirth.day() - 1),
+        );
+    let delta = dtest.signed_duration_since(dbirth).num_days() as i32;
+    if relation == Relation::Older {
+        delta + 1
+    } else {
+        delta - 1
+    }
+}
 
 /// Request for QR code generation from phone app.
 #[derive(Debug)]
@@ -86,7 +101,7 @@ impl QrRequest {
     pub fn new() -> Self {
         QrRequest {
             public: Public::new(),
-	    private: Private::new(),
+            private: Private::new(),
         }
     }
 

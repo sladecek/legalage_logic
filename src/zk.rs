@@ -67,7 +67,7 @@ pub fn generate_card_key(rq: Private) -> Vec<u8> {
     card_key.into_byte_vector()
 }
 
-pub fn compute_challenge(card_key: Vec<u8>, today: u32) -> Vec<u8> {
+pub fn compute_challenge(card_key: Vec<u8>, today: i32) -> Vec<u8> {
     let card_key = Bn128Field::from_byte_vector(card_key);
     let today = Bn128Field::from(today);
     let challenge = compute_mimc7r10_hash(&today, &card_key);
