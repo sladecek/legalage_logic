@@ -93,6 +93,8 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
     let mut delta = rq.public.delta;
     let mut today = rq.public.today;
 
+    println!("generate proof today: {}", today);
+    
     if rq.is_relation_valid() {
         // Inverting the relation.
         if rq.public.relation == Relation::Younger {
@@ -112,7 +114,9 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
         // verified but it will look similar to a real proof and the
         // generation will take the same time.
         delta = 0;
-        today = birthday + 1;
+	// Delta is the only parameter which can be changed or else
+	// the challenge will be also changed.
+	println!("Generating invalid proof delta={} birthday={} today={} OLDER ", delta, birthday, today);
     }
 
     arguments.push(Bn128Field::from(birthday));

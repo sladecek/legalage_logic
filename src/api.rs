@@ -1,5 +1,3 @@
-//use bellman_ce::groth16::Proof as BellmanProof;
-//use bellman_ce::pairing::bn256::Bn256;
 use bs58;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::Cursor;
@@ -77,6 +75,7 @@ impl Private {
 }
 
 pub fn age_to_delta(birthday: i32, age: i32, relation: Relation) -> i32 {
+    println!("age_to_delta birthday={} age={} relation={:?}", birthday, age, relation);
     let dbirth = NaiveDate::from_num_days_from_ce(birthday - 1721425);
     let dtest =
         NaiveDate::from_ymd_opt(dbirth.year() + age, dbirth.month(), dbirth.day()).unwrap_or(
