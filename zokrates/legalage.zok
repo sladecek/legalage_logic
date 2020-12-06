@@ -1,7 +1,7 @@
 import "hashes/mimc7/mimc7R10"
 
-def main (private field birthday, field delta, field today, private field photo_hash, private field private_key) -> field:
-    assert(birthday + delta < today)
+def main (private field birthday, field delta, field today, field younger, private field photo_hash, private field private_key) -> field:
+    assert(if younger==0 then birthday + delta < today else birthday + delta > today fi)
     field k = birthday * private_key
     field public_key = mimc7R10(photo_hash, k) * photo_hash
     return mimc7R10(today, public_key)

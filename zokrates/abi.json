@@ -16,6 +16,11 @@
       "type": "field"
     },
     {
+      "name": "younger",
+      "public": true,
+      "type": "field"
+    },
+    {
       "name": "photo_hash",
       "public": false,
       "type": "field"

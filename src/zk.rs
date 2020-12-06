@@ -22,14 +22,6 @@ static ABI: &'static [u8] = include_bytes!("../zokrates/abi.json");
 static PROVING_KEY: &'static [u8] = include_bytes!("../zokrates/proving.key");
 static VERIFICATION_KEY: &'static [u8] = include_bytes!("../zokrates/verification.key");
 
-// The circuit validates the "is older" relation: birth + delta >
-// today.  The inverse "is younger" relation is implemented in the
-// same circuit by changing the signs of all quantities. But
-// because there is no signed integer among ZoKrates types, an
-// unsigned int is used and a constant must be added to both sides
-// of the inequality.
-const MAX_JULIAN_DAY: i32 = 9999999;
-
 type Fr = <Bn256 as ScalarEngine>::Fr;
 
 pub fn generate_random_private_key() -> Vec<u8> {
@@ -89,19 +81,18 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
 
     let mut arguments: Vec<Bn128Field> = Vec::new();
 
-    let mut birthday = rq.private.birthday;
+    let birthday = rq.private.birthday;
     let mut delta = rq.public.delta;
-    let mut today = rq.public.today;
+    let today = rq.public.today;
+
+    let mut younger = 0;
 
     println!("generate proof today: {}", today);
-    
+
     if rq.is_relation_valid() {
-        // Inverting the relation.
-        if rq.public.relation == Relation::Younger {
-            birthday = MAX_JULIAN_DAY - birthday;
-            delta = MAX_JULIAN_DAY - delta;
-            today = 2 * MAX_JULIAN_DAY - today;
-        }
+	if rq.public.relation == Relation::Younger {
+            younger =  1;
+	}
     } else {
         // Generating invalid proof.
         //
@@ -112,17 +103,24 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
         // error. Instead we will generate a valid proof but for
         // another set of input variables. The proof will fail to be
         // verified but it will look similar to a real proof and the
-        // generation will take the same time.
+        // generation will take about the same time.
         delta = 0;
-	// Delta is the only parameter which can be changed or else
-	// the challenge will be also changed.
-	println!("Generating invalid proof delta={} birthday={} today={} OLDER ", delta, birthday, today);
+        // Delta is the only parameter which can be changed or else
+        // the challenge will be also changed.
+        // TODO smazat
+        println!(
+            "Generating invalid proof delta={} birthday={} today={} OLDER ",
+            delta, birthday, today
+        );
     }
 
     arguments.push(Bn128Field::from(birthday));
     arguments.push(Bn128Field::from(delta));
     arguments.push(Bn128Field::from(today));
-    arguments.push(Bn128Field::from_byte_vector(rq.private.photos_digest.clone()));
+    arguments.push(Bn128Field::from(younger));
+    arguments.push(Bn128Field::from_byte_vector(
+        rq.private.photos_digest.clone(),
+    ));
     arguments.push(Bn128Field::from_byte_vector(rq.private.private_key));
 
     let witness = interpreter
@@ -135,9 +133,11 @@ pub fn generate_proof(rq: QrRequest) -> Result<ProofQrCode, String> {
 
     let proof = G16::generate_proof(prg, witness, PROVING_KEY.to_vec());
 
-    let hidden_proof = hide_bellman_proof(&proof.proof.into_bellman::<Bn128Field>(),
-					  &rq.private.photos_digest);
-    
+    let hidden_proof = hide_bellman_proof(
+        &proof.proof.into_bellman::<Bn128Field>(),
+        &rq.private.photos_digest,
+    );
+
     let qr = ProofQrCode {
         public: rq.public,
         proof: hidden_proof,
@@ -153,20 +153,18 @@ pub fn verify_proof(qr: &ProofQrCode, photo_digest: &Vec<u8>) -> Result<(), Stri
     let mut inputs: Vec<Bn128Field> = Vec::new();
 
     // Inverting the relation.
-    let mut delta = qr.public.delta;
-    let mut today = qr.public.today;
-    if qr.public.relation == Relation::Younger {
-        delta = MAX_JULIAN_DAY - delta;
-        today = 2 * MAX_JULIAN_DAY - today;
-    }
+    let delta = qr.public.delta;
+    let today = qr.public.today;
+    let younger =  qr.public.relation == Relation::Younger;
+
 
     inputs.push(Bn128Field::from(delta));
     inputs.push(Bn128Field::from(today));
+    inputs.push(Bn128Field::from(if younger {1} else {0}));
     inputs.push(Bn128Field::from_byte_vector(qr.challenge.clone()));
 
     let proof = unhide_bellman_proof(&qr.proof, photo_digest).unwrap(); // TODO error
 
-    
     let mut raw: Vec<u8> = Vec::new();
     proof.write(&mut raw).unwrap();
 
@@ -202,7 +200,6 @@ pub fn hide_bellman_proof(proof: &BellmanProof<Bn256>, hidding: &Vec<u8>) -> Vec
     proof.write(&mut proof_bytes).unwrap();
     hide_buffer(&mut proof_bytes, hidding);
     proof_bytes
-	
 }
 
 pub fn unhide_bellman_proof(
@@ -308,8 +305,8 @@ mod tests {
     }
 
     #[test]
-    fn verify_younger() {
-	let photos_digest = vec![2u8, 7];
+    fn verify_older() {
+        let photos_digest = vec![2u8, 7];
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -330,8 +327,8 @@ mod tests {
     }
 
     #[test]
-    fn verify_older() {
-	let photos_digest = Vec::new();
+    fn verify_younger() {
+        let photos_digest = Vec::new();
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -353,7 +350,7 @@ mod tests {
 
     #[test]
     fn verify_invalid() {
-	let photos_digest = Vec::new();
+        let photos_digest = Vec::new();
         let rq = QrRequest {
             public: Public {
                 today: 2020,
@@ -373,7 +370,7 @@ mod tests {
 
     #[test]
     fn verify_marginal_case_older() {
-	let photos_digest = Vec::new();
+        let photos_digest = Vec::new();
         // Equality is refused. Wait till midnight.
         let rq = QrRequest {
             public: Public {
@@ -394,7 +391,7 @@ mod tests {
 
     #[test]
     fn verify_marginal_case_younger() {
-	let photos_digest = Vec::new();
+        let photos_digest = Vec::new();
         let rq = QrRequest {
             public: Public {
                 today: 2020,
